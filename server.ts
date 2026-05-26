@@ -90,8 +90,8 @@ async function startServer() {
     try {
       const { studentName, birthDate, trainingName, completionDate, hours, issuingOrg, imageUrl, notes } = req.body;
 
-      if (!studentName || !trainingName || !imageUrl) {
-        res.status(400).json({ error: "필수 정보(이름, 교육명, 수료증 사진)가 누락되었습니다." });
+      if (!studentName || !trainingName) {
+        res.status(400).json({ error: "필수 정보(이름, 교육명)가 누락되었습니다." });
         return;
       }
 
@@ -104,7 +104,7 @@ async function startServer() {
         hours: Number(hours) || 0,
         issuingOrg: String(issuingOrg || "").trim(),
         certificateNo: "",
-        imageUrl: String(imageUrl),
+        imageUrl: String(imageUrl || ""),
         submittedAt: new Date().toISOString(),
         notes: String(notes || "").trim()
       };
@@ -116,6 +116,50 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error creating certificate:", err);
       res.status(500).json({ error: "수료증을 저장하는 동안 오류가 발생했습니다: " + err.message });
+    }
+  });
+
+  // Bulk create certificates (Excel upload)
+  app.post("/api/certificates/bulk", (req: Request, res: Response) => {
+    try {
+      const { items } = req.body;
+      if (!items || !Array.isArray(items)) {
+        res.status(400).json({ error: "올바르지 않은 벌크 데이터 포맷입니다. 배열 수신이 요구됩니다." });
+        return;
+      }
+
+      const createdItems: Certificate[] = [];
+      for (const item of items) {
+        const { studentName, birthDate, trainingName, completionDate, hours, issuingOrg, notes } = item;
+        if (!studentName || !trainingName) {
+          continue; // Skip invalid entries
+        }
+
+        const newCert: Certificate = {
+          id: "cert_" + Math.random().toString(36).substring(2, 11) + "_" + Math.random().toString(36).substring(2, 5),
+          studentName: String(studentName).trim(),
+          birthDate: String(birthDate || "").trim(),
+          trainingName: String(trainingName).trim(),
+          completionDate: String(completionDate || "").trim(),
+          hours: Number(hours) || 0,
+          issuingOrg: String(issuingOrg || "").trim(),
+          certificateNo: "",
+          imageUrl: "",
+          submittedAt: new Date().toISOString(),
+          notes: String(notes || "").trim()
+        };
+        createdItems.push(newCert);
+      }
+
+      if (createdItems.length > 0) {
+        certificates = [...createdItems, ...certificates];
+        saveDB();
+      }
+
+      res.status(201).json({ count: createdItems.length, items: createdItems });
+    } catch (err: any) {
+      console.error("Error bulk creating certificates:", err);
+      res.status(500).json({ error: "벌크 저장 도중 서버 에러가 발생했습니다: " + err.message });
     }
   });
 
