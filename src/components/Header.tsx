@@ -29,23 +29,25 @@ export default function Header({
           </div>
         </div>
 
-        {/* AUTH/USER SECTION */}
-        {isAdmin && (
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-0.5xs font-bold text-indigo-700">
-              <User className="h-3.5 w-3.5 text-indigo-500" />
-              <span>관리자 모드</span>
+        {/* CONTROLS SECTION */}
+        <div className="flex items-center gap-2.5">
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-0.5xs font-bold text-indigo-700">
+                <User className="h-3.5 w-3.5 text-indigo-500" />
+                <span>관리자 모드</span>
+              </div>
+              <button
+                onClick={onAdminLogout}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 text-0.5xs font-bold text-slate-600 cursor-pointer transition-all"
+                title="관리실 로그아웃"
+              >
+                <LogOut className="h-3.5 w-3.5 text-slate-400" />
+                <span>로그아웃</span>
+              </button>
             </div>
-            <button
-              onClick={onAdminLogout}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 text-0.5xs font-bold text-slate-600 cursor-pointer transition-all"
-              title="관리실 로그아웃"
-            >
-              <LogOut className="h-3.5 w-3.5 text-slate-400" />
-              <span>로그아웃</span>
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
       </div>
     </header>

@@ -26,7 +26,11 @@ import {
   CalendarDays,
   Printer,
   Plus,
-  Upload
+  Upload,
+  Copy,
+  Check,
+  Smartphone,
+  Share2
 } from "lucide-react";
 import { read, utils } from "xlsx";
 import Header from "./components/Header";
@@ -37,6 +41,18 @@ import { formatDate, exportToCSV, printCertificatesTable, printSingleCertificate
 export default function App() {
   // Views
   const [currentView, setCurrentView] = useState<"submit" | "admin">("submit");
+  
+  // PWA Support States
+  const [isIframe, setIsIframe] = useState<boolean>(() => {
+    try {
+      return window.self !== window.top || window.location.href.includes("ai.studio") || document.referrer.includes("ai.studio");
+    } catch (e) {
+      return true;
+    }
+  });
+  const [showPwaModal, setShowPwaModal] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   
   // Admin Subsection Tab (list: 전체 수료 내역 목록, traineeStats: 수강생별 통계 대장)
   const [adminTab, setAdminTab] = useState<"list" | "traineeStats">("list");
@@ -109,6 +125,36 @@ export default function App() {
     checkHealth();
     fetchCertificates();
   }, []);
+
+  // Listen for beforeinstallprompt event for PWA
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to install prompt: ${outcome}`);
+    setDeferredPrompt(null);
+  };
+
+  const handleCopyUrl = () => {
+    const url = window.location.origin;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      alert("주소 복사에 실패했습니다. 브라우저 주소창의 주소를 복사해 주세요: " + url);
+    });
+  };
 
   const checkHealth = async () => {
     try {
@@ -490,6 +536,46 @@ export default function App() {
         isAdmin={adminPasswordVerified}
         onAdminLogout={handleLogoutAdmin}
       />
+
+      {isIframe && (
+        <div className="bg-amber-50 border-b border-amber-100/75 px-4 py-3 text-amber-950 text-[11px] font-semibold shadow-2xs">
+          <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+              <span>
+                <b>⚠️ 원격 포털 편집환경 진입 상태</b>: 포털 편집장 내에서 '홈 화면에 추가'를 하시면 앱 대신 <b>구글 AI 스튜디오 사이트</b>가 저장됩니다. 진짜 최적화된 독립 전용 앱으로 기기에 설치하려면 아래 <b>[실제 주소 열기]</b>를 누른 후 설치를 진행하십시오.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
+              <button 
+                onClick={handleCopyUrl}
+                className="inline-flex items-center gap-1 bg-white hover:bg-amber-100/50 border border-amber-200 text-amber-900 px-3 py-1.5 rounded-lg font-bold text-[10px] cursor-pointer shadow-3xs transition"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3 w-3 text-emerald-600" />
+                    <span>전용 주소 복사 완료</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3 text-amber-700" />
+                    <span>전용 주소 복사</span>
+                  </>
+                )}
+              </button>
+              <a 
+                href={window.location.origin} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] cursor-pointer shadow-3xs transition"
+              >
+                <ExternalLink className="h-3 w-3" />
+                <span>실제 독립 주소로 창 열기</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1">
 
@@ -1725,6 +1811,143 @@ export default function App() {
                 )}
               </div>
             )}
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 5: SMARTPHONE / PC PWA INSTALLATION GUIDE OVERLAY */}
+      {/* ========================================================= */}
+      {showPwaModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/65 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl space-y-5 my-8 relative">
+            
+            {/* CLOSE BUTTON */}
+            <button 
+              onClick={() => {
+                setShowPwaModal(false);
+                setCopied(false);
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-full hover:bg-slate-100 transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* TITLE HEADER */}
+            <div className="space-y-1 text-center pt-2">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 shadow-sm shadow-sky-100/50">
+                <Smartphone className="h-5.5 w-5.5" />
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 font-sans mt-2">수료증 비서 전용 앱(PWA) 설치 가이드</h3>
+              <p className="text-3xs text-slate-400 font-semibold font-sans">바람직한 독립 실행 전용 환경을 지원합니다.</p>
+            </div>
+
+            {/* IFRAME WARNING */}
+            {isIframe && (
+              <div className="bg-amber-50 border border-amber-200/50 p-3.5 rounded-xl space-y-2 text-3xs text-amber-950 leading-relaxed font-semibold">
+                <p className="flex items-center gap-1.5 text-amber-950 font-bold">
+                  <Sparkles className="h-4 w-4 text-amber-600 animate-pulse" />
+                  현재 구글 AI 스튜디오 내에서 추가를 진행하셨군요!
+                </p>
+                <p className="text-[11px] text-slate-700">
+                  편집 창 상태에서 홈 화면 추가를 하시면, 안의 앱 대신에 <b>구글 AI 스튜디오 사이트</b>가 바로가기로 저장되는 현상이 발생합니다. 아래의 <b>실제 독립 주소</b>를 복사하여 브라우저에서 직접 접속해 설치를 진행하셔야 합니다.
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <button 
+                    onClick={handleCopyUrl}
+                    className="flex-1 inline-flex items-center justify-center gap-1 bg-white border border-amber-300 text-amber-950 px-2 px-2.5 py-1.8 rounded-lg font-bold text-3xs cursor-pointer shadow-3xs hover:bg-amber-100/30 transition duration-150"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>복사 완료!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5 text-amber-700" />
+                        <span>실제 주소 복사</span>
+                      </>
+                    )}
+                  </button>
+                  <a 
+                    href={window.location.origin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-1 bg-sky-600 text-white px-2 px-2.5 py-1.8 rounded-lg font-bold text-3xs cursor-pointer shadow-3xs hover:bg-sky-700 transition duration-150 text-center"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span>실제 주소 새창 열기</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* DIRECT INSTALL TRIGGER BUTTON (FOR COMPATIBLE BROWSERS) */}
+            {deferredPrompt && (
+              <div className="bg-gradient-to-tr from-sky-50 to-indigo-50/50 border border-sky-100 p-4 rounded-xl text-center space-y-2">
+                <p className="text-3xs font-bold text-slate-800">🎉 현재 브라우저는 원클릭 다이렉트 설치를 지원합니다!</p>
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-4 py-2.5 shadow-md shadow-sky-100 cursor-pointer transition"
+                >
+                  <Award className="h-4.5 w-4.5 text-sky-200 animate-pulse" />
+                  스마트폰/PC에 원클릭 앱 바로 설치하기
+                </button>
+              </div>
+            )}
+
+            {/* MANUAL STEP BY STEP GUIDES BY DEVICE OS */}
+            <div className="space-y-3 pt-1">
+              <div className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-1 flex items-center gap-1.5 leading-none">
+                <span className="w-1 h-3 bg-sky-500 rounded-xs" />
+                <span>수동 설치 및 덮어쓰기 안내 (반드시 거쳐야 할 과정)</span>
+              </div>
+
+              {/* iOS Safari */}
+              <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg space-y-0.5 text-3xs text-slate-600 leading-normal">
+                <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-extrabold text-[9px] mb-1">아이폰 / 아이패드 (Safari 전용)</span>
+                <p className="font-semibold text-slate-700">
+                  1. <b>[실제 주소 새창 열기]</b>를 터치하여 진짜 화면으로 접속합니다.<br/>
+                  2. 화면 하단의 <span className="font-bold text-slate-900 border-b border-slate-400">'공유'</span> (네모에서 위쪽 화살표) 아이콘을 클릭합니다.<br/>
+                  3. 메뉴를 골라 <span className="font-bold text-slate-950 bg-sky-50/70 p-0.5 rounded">'홈 화면에 추가'</span>를 눌러 완료해 주십시오.
+                </p>
+              </div>
+
+              {/* Android Chrome */}
+              <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg space-y-0.5 text-3xs text-slate-600 leading-normal">
+                <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-extrabold text-[9px] mb-1">삼성 갤럭시 등 안드로이드 (Chrome / 삼성인터넷)</span>
+                <p className="font-semibold text-slate-700">
+                  1. 브라우저 주소창 오른편의 <span className="font-bold text-slate-900">'더보기(점 세개 ⋮)'</span> 혹은 하단 삼선 메뉴를 터치합니다.<br/>
+                  2. <span className="font-bold text-slate-950 bg-emerald-50/70 p-0.5 rounded">'홈 화면에 추가'</span> 또는 <span className="font-bold text-emerald-800 bg-emerald-50/70 p-0.5 rounded">'앱 설치'</span>를 눌러주십시오.<br/>
+                  3. 바탕화면에 바로 사용할 전용 비서 앱 아이콘이 바로 등록됩니다.
+                </p>
+              </div>
+
+              {/* PC Chrome */}
+              <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg space-y-0.5 text-3xs text-slate-600 leading-normal">
+                <span className="inline-block px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-extrabold text-[9px] mb-1">데스크톱 PC (Chrome / Edge 브라우저)</span>
+                <p className="font-semibold text-slate-700">
+                  1. 주소창 맨 우측에 나타나는 <span className="font-bold text-indigo-700 bg-indigo-50/70 p-0.5 rounded">'앱 다운로드 모니터 아이콘(⊕)'</span>을 마우스 클릭합니다.<br/>
+                  2. 또는 브라우저 오른쪽 위 점 세개 설정에서 <span className="font-bold text-slate-905">'수료증 정리 비서 설치'</span>를 실행하세요.
+                </p>
+              </div>
+            </div>
+
+            {/* ACTION FOOTER BUTTON */}
+            <div className="pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPwaModal(false);
+                  setCopied(false);
+                }}
+                className="w-full text-center py-2.5 bg-slate-100 hover:bg-slate-150 font-bold text-xs text-slate-700 rounded-xl cursor-pointer transition"
+              >
+                가이드 확인 완료 및 닫기
+              </button>
+            </div>
 
           </div>
         </div>

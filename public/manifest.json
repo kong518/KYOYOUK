@@ -1,0 +1,24 @@
+{
+  "short_name": "수료증 비서",
+  "name": "수료증 정리 비서",
+  "description": "수료증 사진을 자동으로 정리하고 수강내역을 관리하는 스마트 비서 서비스",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "theme_color": "#0ea5e9",
+  "orientation": "portrait"
+}
