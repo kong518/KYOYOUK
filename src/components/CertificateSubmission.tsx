@@ -23,6 +23,110 @@ import {
 import { compressImage } from "../utils";
 import { AnalysisResult } from "../types";
 
+interface ExtractedRules {
+  studentName: string;
+  birthDate: string;
+  trainingName: string;
+  completionDate: string;
+  hours: number;
+  issuingOrg: string;
+}
+
+function parseFilenameRules(fileName: string): ExtractedRules {
+  const cleanName = fileName.replace(/\.[^/.]+$/, "");
+  const parts = cleanName.split(/[-_\s]+/);
+  
+  let studentName = "";
+  let birthDate = "";
+  let trainingName = "";
+  let completionDate = "";
+  let hours = 0;
+  let issuingOrg = "";
+
+  // 1. Hours Matching: e.g. "8시간", "8hr", "8h", "8H"
+  const hoursMatch = cleanName.match(/(\d+)\s*(시간|hr|hrs|h|H)\b/i);
+  if (hoursMatch) {
+    hours = parseInt(hoursMatch[1], 10);
+  }
+
+  // 2. Dates: Format YYYY-MM-DD completionDate
+  const dateMatch4 = cleanName.match(/(\d{4})[-.\s/_]?(\d{1,2})[-.\s/_]?(\d{1,2})/);
+  if (dateMatch4) {
+    const mm = dateMatch4[2].padStart(2, '0');
+    const dd = dateMatch4[3].padStart(2, '0');
+    completionDate = `${dateMatch4[1]}-${mm}-${dd}`;
+  }
+
+  // BirthDate matching: 6 digits (e.g. 850505) from filename
+  const digit6Match = cleanName.match(/\b(\d{6})\b/);
+  if (digit6Match) {
+    birthDate = digit6Match[1];
+  } else {
+    const all6Digits = cleanName.match(/(\d{6})/g);
+    if (all6Digits) {
+      for (const d of all6Digits) {
+        if (!completionDate.replace(/-/g, "").includes(d)) {
+          birthDate = d;
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. Trainee Name: 2-4 character Hangul words. Skip common certificate nouns as user names.
+  const nameKeywordsToSkip = [
+    "수료증", "수료", "이수증", "이수", "교육", "과정", "센터", "협회", "대학", "학교", 
+    "병원", "시간", "수정", "최종", "사본", "제출", "등록", "확인", "훈련", "일반", "전문", 
+    "기본", "종합", "복지", "재활", "수원", "기관", "이름", "성명", "과제", "실습", "워크숍", "증명서"
+  ];
+  for (const part of parts) {
+    if (/^[가-힣]{2,4}$/.test(part) && !nameKeywordsToSkip.some(kw => part.includes(kw))) {
+      studentName = part;
+      break;
+    }
+  }
+
+  // 4. Training Course: Split parts containing keywords
+  const courseKeywords = ["교육", "훈련", "과정", "수업", "세미나", "워크숍", "학습", "프로그램", "과목", "자격", "수료", "이수", "특강", "강좌", "캠프", "연수", "학습", "아카데미", "컨퍼런스"];
+  for (const part of parts) {
+    if (courseKeywords.some(kw => part.includes(kw)) && part !== studentName) {
+      trainingName = part;
+      break;
+    }
+  }
+
+  if (!trainingName) {
+    const candidateParts = parts.filter(p => {
+      if (p === studentName) return false;
+      if (/^\d+$/.test(p)) return false;
+      if (p.includes("시간") || p.toLowerCase().includes("h")) return false;
+      return p.length >= 2;
+    });
+    if (candidateParts.length > 0) {
+      candidateParts.sort((a, b) => b.length - a.length);
+      trainingName = candidateParts[0];
+    }
+  }
+
+  // 5. Issuing Org: parts containing org suffix keywords
+  const orgKeywords = ["협회", "센터", "기관", "대학", "학교", "병원", "공단", "공사", "재단", "의원", "치과", "복지관", "재활", "수원", "사무소", "공동", "네트워크", "조합", "본부", "지부", "학회", "포럼", "인재원"];
+  for (const part of parts) {
+    if (orgKeywords.some(kw => part.includes(kw)) && part !== studentName && part !== trainingName) {
+      issuingOrg = part;
+      break;
+    }
+  }
+
+  return {
+    studentName,
+    birthDate,
+    trainingName,
+    completionDate,
+    hours,
+    issuingOrg
+  };
+}
+
 export interface CertificateSubmissionProps {
   onSuccess: () => void;
 }
@@ -40,6 +144,7 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
   const [processingStep, setProcessingStep] = useState<number>(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [hasAiAutofill, setHasAiAutofill] = useState(false);
+  const [hasFileNameAutofill, setHasFileNameAutofill] = useState(false);
 
   // Form Field States
   const [studentName, setStudentName] = useState("");
@@ -106,6 +211,7 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
     setImageMimeType(mime);
     setAnalysisError(null);
     setHasAiAutofill(false);
+    setHasFileNameAutofill(false);
 
     const isFilePdf = mime === "application/pdf";
     setIsPdf(isFilePdf);
@@ -113,6 +219,21 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
     // Initial draft preview representation
     const localUrl = URL.createObjectURL(file);
     setImagePreview(localUrl);
+
+    // 1. Apply rules-based extraction from filename immediately
+    try {
+      const ruleData = parseFilenameRules(file.name);
+      let filledAny = false;
+      if (ruleData.studentName) { setStudentName(ruleData.studentName); filledAny = true; }
+      if (ruleData.birthDate) { setBirthDate(ruleData.birthDate); filledAny = true; }
+      if (ruleData.trainingName) { setTrainingName(ruleData.trainingName); filledAny = true; }
+      if (ruleData.completionDate) { setCompletionDate(ruleData.completionDate); filledAny = true; }
+      if (ruleData.hours) { setHours(ruleData.hours); filledAny = true; }
+      if (ruleData.issuingOrg) { setIssuingOrg(ruleData.issuingOrg); filledAny = true; }
+      setHasFileNameAutofill(filledAny);
+    } catch (ruleErr) {
+      console.warn("Filename rules parsing error:", ruleErr);
+    }
 
     // Start compression and analysis
     setIsProcessing(true);
@@ -178,13 +299,13 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
 
       setProcessingStep(5);
       
-      // Auto-fill form fields
-      setStudentName(parsedResult.studentName || "");
-      setBirthDate(parsedResult.birthDate || "");
-      setTrainingName(parsedResult.trainingName || "");
-      setCompletionDate(parsedResult.completionDate || "");
-      setHours(parsedResult.hours || 0);
-      setIssuingOrg(parsedResult.issuingOrg || "");
+      // Auto-fill form fields (overwrite with precision)
+      setStudentName(parsedResult.studentName || studentName);
+      setBirthDate(parsedResult.birthDate || birthDate);
+      setTrainingName(parsedResult.trainingName || trainingName);
+      setCompletionDate(parsedResult.completionDate || completionDate);
+      setHours(parsedResult.hours || hours);
+      setIssuingOrg(parsedResult.issuingOrg || issuingOrg);
       setHasAiAutofill(true);
 
       setTimeout(() => {
@@ -194,9 +315,9 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
     } catch (err: any) {
       console.error(err);
       if (err.message && err.message.includes("GEMINI_API_KEY")) {
-        setAnalysisError("분석 API 키가 설정되지 않았습니다. 하지만 걱정 마세요! 인적사항을 직접 기재하여 수동으로 수료증을 등록할 수 있습니다.");
+        setAnalysisError("분석 API 키가 설정되지 않았습니다. 하지만 우측 파일명 분석 규칙으로 인적사항을 자동으로 채웠습니다! 확인하신 후 제출해 주시면 완료됩니다.");
       } else {
-        setAnalysisError("비대면 분석에 실패했습니다. 아래 폼에서 인적사항을 직접 기입해 주시면 수능 내용을 정상적으로 제출할 수 있습니다.");
+        setAnalysisError("비대면 정밀 분석에 실패했습니다 (Vercel API 용량 한계 또는 키 미설정). 하지만 파일명 분석 규칙으로 기본 정보를 안전하게 추출해 드렸으니, 아래 세부 정보를 최종 확인하신 채 바로 등록을 완료해 주세요!");
       }
       setIsProcessing(false);
     }
@@ -433,6 +554,16 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
                   <Sparkles className="h-4 w-4 text-emerald-600" />
                   <div>
                     <strong>AI 판독 성공!</strong> 성명, 교육명, 수료 일자, 시간이 자동으로 기재되었습니다. 내용을 확인하신 후 제출해 주세요.
+                  </div>
+                </div>
+              )}
+
+              {/* Filename rules autofill success badge */}
+              {hasFileNameAutofill && !hasAiAutofill && !isProcessing && (
+                <div className="flex items-center gap-2 rounded-xl bg-sky-50 px-4 py-3 text-xs text-sky-800 border border-sky-100">
+                  <Sparkles className="h-4 w-4 text-sky-600" />
+                  <div>
+                     <strong>파일명 규칙 자동 완성!</strong> 업로드된 파일명(<code>{selectedFile?.name}</code>)을 해석하여 성명, 생년월일, 교육시간 등을 성공적으로 추출했습니다. 비대면 이미지 정밀 분석에 제한이 있더라도 이상태로 즉시 등록이 가능합니다.
                   </div>
                 </div>
               )}
