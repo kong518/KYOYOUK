@@ -1,0 +1,10 @@
+{
+  "name": "수료증 정리 비서",
+  "description": "수료증 사진을 업로드하면 AI가 자동으로 수강자, 교육명, 일자, 시간을 분석/정리하고 관리할 수 있는 수료증 관리 비서 서비스입니다.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
