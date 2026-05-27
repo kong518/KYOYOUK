@@ -11,7 +11,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Certificate } from "./src/types";
 
 // DB Path
-const DB_PATH = path.join(process.cwd(), "data", "db.json");
+const IS_VERCEL = !!process.env.VERCEL;
+const ORIGINAL_DB_PATH = path.join(process.cwd(), "data", "db.json");
+const DB_PATH = IS_VERCEL ? path.join("/tmp", "db.json") : ORIGINAL_DB_PATH;
 
 // Ensure data directory exists
 if (!fs.existsSync(path.dirname(DB_PATH))) {
@@ -20,6 +22,14 @@ if (!fs.existsSync(path.dirname(DB_PATH))) {
 
 // Read database
 let certificates: Certificate[] = [];
+if (IS_VERCEL && !fs.existsSync(DB_PATH) && fs.existsSync(ORIGINAL_DB_PATH)) {
+  try {
+    fs.copyFileSync(ORIGINAL_DB_PATH, DB_PATH);
+  } catch (err) {
+    console.error("Failed to copy DB to temp writable path:", err);
+  }
+}
+
 if (fs.existsSync(DB_PATH)) {
   try {
     const raw = fs.readFileSync(DB_PATH, "utf-8");
@@ -29,8 +39,13 @@ if (fs.existsSync(DB_PATH)) {
     certificates = [];
   }
 } else {
-  fs.writeFileSync(DB_PATH, JSON.stringify([], null, 2));
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify([], null, 2));
+  } catch (err) {
+    console.error("Database initialization error:", err);
+  }
 }
+
 
 function saveDB() {
   try {
