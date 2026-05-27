@@ -117,14 +117,21 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+  // Request Logging for debugging route matches
+  app.use((req, res, next) => {
+    console.log(`[HTTP Route Log] ${req.method} ${req.url}`);
+    next();
+  });
+
   // Set payload limits to accommodate compressed certificate images in base64
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // ==================== API ENDPOINTS ====================
+  // ==================== API ENDPOINTS (ROUTER) ====================
+  const apiRouter = express.Router();
 
   // Check backend server and API key status
-  app.get("/api/health", (req: Request, res: Response) => {
+  apiRouter.get("/health", (req: Request, res: Response) => {
     const hasApiKey = !!(process.env.GEMINI_API_KEY || process.env.Gemini || process.env.gemini);
     res.json({
       status: "ok",
@@ -134,12 +141,12 @@ async function startServer() {
   });
 
   // Get all saved certificates
-  app.get("/api/certificates", (req: Request, res: Response) => {
+  apiRouter.get("/certificates", (req: Request, res: Response) => {
     res.json(certificates);
   });
 
   // Create a new certificate
-  app.post("/api/certificates", (req: Request, res: Response) => {
+  apiRouter.post("/certificates", (req: Request, res: Response) => {
     try {
       const { studentName, birthDate, trainingName, completionDate, hours, issuingOrg, imageUrl, notes } = req.body;
 
@@ -173,7 +180,7 @@ async function startServer() {
   });
 
   // Bulk create certificates (Excel upload)
-  app.post("/api/certificates/bulk", (req: Request, res: Response) => {
+  apiRouter.post("/certificates/bulk", (req: Request, res: Response) => {
     try {
       const { items } = req.body;
       if (!items || !Array.isArray(items)) {
@@ -217,7 +224,7 @@ async function startServer() {
   });
 
   // Update a certificate
-  app.put("/api/certificates/:id", (req: Request, res: Response) => {
+  apiRouter.put("/certificates/:id", (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { studentName, birthDate, trainingName, completionDate, hours, issuingOrg, notes } = req.body;
@@ -248,7 +255,7 @@ async function startServer() {
   });
 
   // Delete a certificate
-  app.delete("/api/certificates/:id", (req: Request, res: Response) => {
+  apiRouter.delete("/certificates/:id", (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const index = certificates.findIndex(c => c.id === id);
@@ -267,7 +274,7 @@ async function startServer() {
   });
 
   // Analyze Certificate via Gemini Flash API
-  app.post("/api/ai/analyze-certificate", async (req: Request, res: Response) => {
+  apiRouter.post("/ai/analyze-certificate", async (req: Request, res: Response) => {
     try {
       const { imageData, mimeType } = req.body; // imageData is base64 string without full data:image/... prefix
 
@@ -358,6 +365,10 @@ async function startServer() {
       res.status(500).json({ error: "AI 분석 도중 오류가 발생했습니다: " + err.message });
     }
   });
+
+  // Mount router under /api AND / to support flexible serverless environments
+  app.use("/api", apiRouter);
+  app.use("/", apiRouter);
 
   // ==================== VITE MIDDLEWARE SETUP ====================
 
