@@ -44,9 +44,9 @@ function saveDB() {
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient() {
   if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
+    const key = process.env.GEMINI_API_KEY || process.env.Gemini || process.env.gemini;
     if (!key) {
-      throw new Error("GEMINI_API_KEY environment variable is not set. Please set it in Settings > Secrets.");
+      throw new Error("GEMINI_API_KEY (또는 Gemini) 환경 변수가 설정되지 않았습니다. Vercel 환경 변수(Environment Variables)에서 Key 이름을 'GEMINI_API_KEY' (모두 대문자)로 등록해 주세요.");
     }
     aiClient = new GoogleGenAI({
       apiKey: key,
@@ -72,7 +72,7 @@ async function startServer() {
 
   // Check backend server and API key status
   app.get("/api/health", (req: Request, res: Response) => {
-    const hasApiKey = !!process.env.GEMINI_API_KEY;
+    const hasApiKey = !!(process.env.GEMINI_API_KEY || process.env.Gemini || process.env.gemini);
     res.json({
       status: "ok",
       serverTime: new Date().toISOString(),
