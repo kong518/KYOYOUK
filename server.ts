@@ -322,9 +322,28 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] Multi-user Certificate Organizer running on port ${PORT}`);
-  });
+  // Only listen to port if we are NOT on Vercel Serverless
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[Server] Multi-user Certificate Organizer running on port ${PORT}`);
+    });
+  }
+
+  return app;
 }
 
-startServer();
+// Global handler export for serverless environments (like Vercel)
+let cachedApp: any = null;
+const handler = async (req: any, res: any) => {
+  if (!cachedApp) {
+    cachedApp = await startServer();
+  }
+  return cachedApp(req, res);
+};
+
+export default handler;
+
+// For standalone running (like local or AI Studio dev platform)
+if (!process.env.VERCEL) {
+  startServer();
+}
