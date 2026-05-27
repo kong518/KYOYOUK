@@ -30,7 +30,9 @@ import {
   Copy,
   Check,
   Smartphone,
-  Share2
+  Share2,
+  Loader2,
+  Cpu
 } from "lucide-react";
 import { read, utils } from "xlsx";
 import Header from "./components/Header";
@@ -118,6 +120,8 @@ export default function App() {
     notes: ""
   });
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [isAdminAnalyzing, setIsAdminAnalyzing] = useState<boolean>(false);
+  const [adminAnalyzeError, setAdminAnalyzeError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   // Load initial health and certificate data
@@ -386,6 +390,67 @@ export default function App() {
     setAdminPasswordVerified(false);
     localStorage.removeItem("admin_verified");
     setCurrentView("submit");
+  };
+
+  // Admin AI Analysis Trigger Handler
+  const handleAdminAiAnalyze = async (cert: Certificate) => {
+    if (!cert.imageUrl) {
+      alert("분석할 수료증 사진 파일이 존재하지 않는 데이터입니다.");
+      return;
+    }
+
+    setIsAdminAnalyzing(true);
+    setAdminAnalyzeError(null);
+
+    // Default to image/jpeg unless detected otherwise
+    let mimeType = "image/jpeg";
+    if (typeof cert.imageUrl === "string" && cert.imageUrl.startsWith("data:")) {
+      const matches = cert.imageUrl.match(/data:([^;]+);base64/);
+      if (matches && matches[1]) {
+        mimeType = matches[1];
+      }
+    }
+
+    try {
+      const response = await fetch("/api/ai/analyze-certificate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageData: cert.imageUrl,
+          mimeType: mimeType
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "분석 API 오류가 발생했습니다.");
+      }
+
+      // Populate edit fields
+      setEditForm({
+        studentName: data.studentName || cert.studentName,
+        birthDate: data.birthDate || cert.birthDate || "",
+        trainingName: data.trainingName || "",
+        completionDate: data.completionDate || "",
+        hours: data.hours !== undefined ? Number(data.hours) : 0,
+        issuingOrg: data.issuingOrg || "",
+        notes: data.summary ? `[AI 자동분석 요약] ${data.summary}` : (cert.notes || "")
+      });
+
+      // Switch to editing mode right away
+      setIsEditing(true);
+      alert("🎉 AI 문서 분석 성공! 이미지로부터 학과/이름/생년월일 및 교육이수 내역을 완벽하게 추출하여 하단 입력 필드에 가등록했습니다. 정보 상세 및 오류 유무를 확인하신 다음 '수정 완료'를 입력해 확정 저장하세요.");
+    } catch (err: any) {
+      console.error("Admin analysis fail:", err);
+      let friendlyError = err.message || "서버 응답 오류가 발생했습니다.";
+      if (friendlyError.includes("API_KEY") || friendlyError.includes("api_key") || friendlyError.includes("키") || friendlyError.includes("초기화하지")) {
+        friendlyError = "Gemini API 키가 아직 설정되지 않았습니다. 버셀(Vercel) 또는 로컬 환경 설정을 통해 'GEMINI_API_KEY' 변수값에 유효한 Gemini API 키를 저장해 주세요.";
+      }
+      setAdminAnalyzeError(friendlyError);
+      alert("AI 분석 실패:\n" + friendlyError);
+    } finally {
+      setIsAdminAnalyzing(false);
+    }
   };
 
   // Open Edit Mode
@@ -1251,6 +1316,45 @@ export default function App() {
                     <X className="h-5 w-5" />
                   </button>
                 </div>
+
+                {/* AI Automatic Analysis Action Banner */}
+                {selectedCert.imageUrl && (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Cpu className="h-4 w-4 text-indigo-600 animate-pulse" />
+                        <span className="text-xs font-bold text-slate-800">Gemini AI 오피스 자동 판독</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-100 font-bold text-indigo-700">v3.5 Flash</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed font-sans">
+                      수강자가 제출한 수료증 이미지를 판독하여 <strong>성명, 생년월일, 교육과정명, 이수시간, 발령기관, 완료일자</strong>를 자동으로 정밀 분석하여 입력란에 마운트해 줍니다.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isAdminAnalyzing}
+                      onClick={() => handleAdminAiAnalyze(selectedCert)}
+                      className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2 shadow-xs transition cursor-pointer disabled:bg-slate-300 disabled:cursor-not-allowed"
+                    >
+                      {isAdminAnalyzing ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                          Gemini 3.5 모델이 수료증 분석 중... (대략 2초)
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 text-yellow-300 animate-bounce" />
+                          이 수료증 이미지 AI 자동 분석하기
+                        </>
+                      )}
+                    </button>
+                    {adminAnalyzeError && (
+                      <p className="text-[10px] text-rose-500 font-medium font-sans">
+                        알림: {adminAnalyzeError}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {isEditing ? (
                   /* EDITOR PANEL STATE */

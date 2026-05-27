@@ -90,8 +90,8 @@ async function startServer() {
     try {
       const { studentName, birthDate, trainingName, completionDate, hours, issuingOrg, imageUrl, notes } = req.body;
 
-      if (!studentName || !trainingName) {
-        res.status(400).json({ error: "필수 정보(이름, 교육명)가 누락되었습니다." });
+      if (!studentName) {
+        res.status(400).json({ error: "필수 정보(이름)가 누락되었습니다." });
         return;
       }
 
@@ -99,7 +99,7 @@ async function startServer() {
         id: "cert_" + Math.random().toString(36).substring(2, 11),
         studentName: String(studentName).trim(),
         birthDate: String(birthDate || "").trim(),
-        trainingName: String(trainingName).trim(),
+        trainingName: trainingName ? String(trainingName).trim() : "판독 대기 중 (AI 분석 버튼을 클릭하세요)",
         completionDate: String(completionDate || "").trim(),
         hours: Number(hours) || 0,
         issuingOrg: String(issuingOrg || "").trim(),
@@ -224,7 +224,7 @@ async function startServer() {
       }
 
       const activeMimeType = mimeType || "image/jpeg";
-      const cleanBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
+      const cleanBase64 = imageData.replace(/^data:[^;]+;base64,/, "");
 
       // Get initialized Gemini Client
       let ai;
