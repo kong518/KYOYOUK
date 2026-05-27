@@ -4,7 +4,6 @@ export default handler;
 
 export const config = {
   api: {
-    bodyParser: false,
     externalResolver: true,
   },
 };

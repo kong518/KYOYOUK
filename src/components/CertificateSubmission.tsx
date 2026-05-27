@@ -166,7 +166,7 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
         base64 = await readPromise;
         setCompressedBase64(base64);
       } else {
-        const compressed = await compressImage(file, 1200, 1200, 0.75);
+        const compressed = await compressImage(file, 800, 800, 0.5);
         base64 = compressed.base64;
         setCompressedBase64(base64);
       }
@@ -209,7 +209,20 @@ export default function CertificateSubmission({ onSuccess }: CertificateSubmissi
         })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseJsonErr) {
+        if (responseText.includes("Payload Too Large") || response.status === 413) {
+          throw new Error("선택하신 사진의 용량이 서버 제한을 초과했습니다. 더 선명하고 작은 파일을 업로드해 주세요.");
+        }
+        if (response.status === 404) {
+          throw new Error(`서버에서 저장소를 찾지 못했습니다. (404 Not Found) - URL 또는 어플리케이션 상태를 점검해 주세요.`);
+        }
+        throw new Error(`서버 가동 오류 또는 네트워크 중단이 발생했습니다. (받은 응답: ${responseText.substring(0, 100)}...)`);
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "수료증 저장 오류");
       }

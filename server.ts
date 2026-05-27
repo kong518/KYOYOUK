@@ -11,47 +11,85 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Certificate } from "./src/types";
 
 // DB Path
-const IS_VERCEL = !!process.env.VERCEL;
-const ORIGINAL_DB_PATH = path.join(process.cwd(), "data", "db.json");
-const DB_PATH = IS_VERCEL ? path.join("/tmp", "db.json") : ORIGINAL_DB_PATH;
+let ORIGINAL_DB_PATH = path.join(process.cwd(), "data", "db.json");
+let DB_PATH = ORIGINAL_DB_PATH;
+let isMemoryOnly = false;
 
-// Ensure data directory exists
-if (!fs.existsSync(path.dirname(DB_PATH))) {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+// Self-Diagnostic: Check write permission in active directory. Use /tmp on failure.
+try {
+  const primaryDir = path.dirname(ORIGINAL_DB_PATH);
+  if (!fs.existsSync(primaryDir)) {
+    fs.mkdirSync(primaryDir, { recursive: true });
+  }
+  const writeTestPath = path.join(primaryDir, ".write_test_" + Math.random().toString(36).substring(2, 7));
+  fs.writeFileSync(writeTestPath, "test");
+  fs.unlinkSync(writeTestPath);
+  console.log("[DB] Primary data storage is writable.");
+} catch (primaryErr) {
+  console.warn("[DB] Original workspace data directory is read-only. Switching to safe temporary write pathway.", primaryErr.message);
+  DB_PATH = path.join("/tmp", "db.json");
+  try {
+    const backupDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const writeTestPath = path.join(backupDir, ".write_test_tmp");
+    fs.writeFileSync(writeTestPath, "test");
+    fs.unlinkSync(writeTestPath);
+    console.log("[DB] Secondary temporary directory is writable:", DB_PATH);
+  } catch (secondaryErr) {
+    console.error("[DB] All file systems are locked under read-only mode. Activating temporary in-memory caching model.", secondaryErr.message);
+    isMemoryOnly = true;
+  }
 }
 
 // Read database
 let certificates: Certificate[] = [];
-if (IS_VERCEL && !fs.existsSync(DB_PATH) && fs.existsSync(ORIGINAL_DB_PATH)) {
+
+// 1. Initial Load: Read historical state from the workspace's pre-rendered db.json
+if (fs.existsSync(ORIGINAL_DB_PATH)) {
   try {
-    fs.copyFileSync(ORIGINAL_DB_PATH, DB_PATH);
+    const raw = fs.readFileSync(ORIGINAL_DB_PATH, "utf-8");
+    if (raw.trim()) {
+      certificates = JSON.parse(raw);
+    }
+    console.log(`[DB] Successfully loaded ${certificates.length} records from base template.`);
   } catch (err) {
-    console.error("Failed to copy DB to temp writable path:", err);
+    console.error("[DB] Failed reading original workspace data template:", err.message);
   }
 }
 
-if (fs.existsSync(DB_PATH)) {
+// 2. Active Load: Replace with more recent delta updates if temporary DB_PATH holds fresher cache
+if (DB_PATH !== ORIGINAL_DB_PATH && fs.existsSync(DB_PATH)) {
   try {
     const raw = fs.readFileSync(DB_PATH, "utf-8");
-    certificates = JSON.parse(raw);
+    if (raw.trim()) {
+      const activeCerts = JSON.parse(raw);
+      if (Array.isArray(activeCerts) && activeCerts.length > 0) {
+        certificates = activeCerts;
+        console.log(`[DB] Overrode with ${certificates.length} live records from active cache storage.`);
+      }
+    }
   } catch (err) {
-    console.error("Database reading error, starting fresh:", err);
-    certificates = [];
+    console.error("[DB] Failed reading from write-allowed cache storage:", err.message);
   }
-} else {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify([], null, 2));
-  } catch (err) {
-    console.error("Database initialization error:", err);
-  }
-}
-
-
-function saveDB() {
+} else if (!isMemoryOnly && !fs.existsSync(DB_PATH)) {
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(certificates, null, 2), "utf-8");
   } catch (err) {
-    console.error("Database write error:", err);
+    console.error("[DB] Failed initializing storage base:", err.message);
+  }
+}
+
+function saveDB() {
+  if (isMemoryOnly) {
+    console.log("[DB] Disk write bypassed. Storage modifications strictly retained inside Node environment RAM.");
+    return;
+  }
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(certificates, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[DB] Database sync warning:", err.message);
   }
 }
 
